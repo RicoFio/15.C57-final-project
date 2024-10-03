@@ -1,19 +1,17 @@
 [tool.poetry]
-name = "ernp"
+name = "erna"
 version = "0.1.0"
 description = ""
-authors = ["None"]
-license = "MIT"
+authors = ["Riccardo Fiorista", "Yunwei Hu"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.12"
-pandas = "^2.2.3"
-numpy = "^2.1.1"
-seaborn = "^0.13.2"
-matplotlib = "^3.9.2"
-gurobipy = "^11.0.3"
-jupyterlab = "^4.2.5"
+python = ">=3.10,<3.13"
+networkx = "^3.1"
+matplotlib = "^3.8.0"
+numpy = "^1.26.0"
+pandas = "^2.1.1"
+gurobipy = "10"
 
 
 [build-system]
