@@ -1,5 +1,5 @@
 # Public Transport Network Defense from Extreme Weather Events
-We are developing this project as part of the MIT [1.208 Resilient Network](https://catalog.mit.edu/search/?search=1.208) class of 2023
+We are developing this project as part of the MIT [6.C75 Optimization Methods](https://student.mit.edu/catalog/m6e.html#6.C57) class of 2024
 
 ## How to run
 ```shell
