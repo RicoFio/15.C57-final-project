@@ -69,7 +69,7 @@ class GTFSGraphGenerator:
 
         return out_path
 
-    def _loaf_ua_feed(self):
+    def _load_ua_feed(self):
         with ZipFile(self.gtfs_file_path) as ref:
             # First extract all GTFS files as UA cannot load ZIPs directly
             # Could use tmpfile but it's a major pain and the out dir is there anyway
@@ -81,6 +81,17 @@ class GTFSGraphGenerator:
                                                        bbox=self.bbox,
                                                        remove_stops_outsidebbox=True,
                                                        append_definitions=True)
+            if 'shape_dist_traveled' not in loaded_feeds.stop_times.columns:
+                # Load shape.txt
+                shape_feed = pd.read_csv(self.out_dir_path.absolute() / 'shapes.txt')
+                stop_times = loaded_feeds.stop_times.merge(loaded_feeds.trips[['trip_id', 'shape_id']], on='trip_id', how='left')
+                stop_times_with_shapes = stop_times.merge(
+                    shape_feed[['shape_id', 'shape_dist_traveled', 'shape_pt_sequence']],
+                    left_on=['shape_id', 'stop_sequence'],
+                    right_on=['shape_id', 'shape_pt_sequence'],
+                    how='left'
+                )
+                loaded_feeds.stop_times = stop_times_with_shapes
             # Remove all the extracted files as they are in memory now
             remove_files_in_dir(self.out_dir_path, 'txt')
         return loaded_feeds
@@ -102,7 +113,7 @@ class GTFSGraphGenerator:
 
         if not gml_out_path.exists():
             # Load GTFS data
-            loaded_feeds = self._loaf_ua_feed()
+            loaded_feeds = self._load_ua_feed()
 
             # Create the transit network graph from GTFS feeds using the urbanaccess library
             try:
@@ -123,15 +134,20 @@ class GTFSGraphGenerator:
                     tid = trip_id
 
                     stdf = loaded_feeds.stop_times
+                    stdf = stdf.merge(loaded_feeds.trips[['trip_id', 'shape_id']], on='trip_id', how='left')
+
                     dist = stdf[stdf.trip_id == tid]
                     d_origin = dist[dist['stop_id'] == osid]['shape_dist_traveled'].max()
                     d_destination = dist[dist['stop_id'] == dsid]['shape_dist_traveled'].max()
-                    distance = np.round(abs(d_destination - d_origin), decimals=2)
+                    if pd.isna(d_origin) or pd.isna(d_destination):
+                        distance = np.inf
+                    else:
+                        distance = np.round(abs(d_destination - d_origin), decimals=2)
 
                     if math.isinf(distance):
                         sdf = loaded_feeds.stops
-                        origin_loc = sdf[sdf['stop_id'] == osid][['stop_lat', 'stop_lon']].tuple()
-                        destination_loc = sdf[sdf['stop_id'] == dsid][['stop_lat', 'stop_lon']].tuple()
+                        origin_loc = sdf[sdf['stop_id'] == osid][['stop_lat', 'stop_lon']].values[0]
+                        destination_loc = sdf[sdf['stop_id'] == dsid][['stop_lat', 'stop_lon']].values[0]
                         distance = haversine(origin_loc, destination_loc, unit=Unit.METERS)
                     return distance
 
@@ -146,26 +162,26 @@ class GTFSGraphGenerator:
 
                     dist = get_distance(osid, dsid, tid)
 
-                    rid = loaded_feeds.trips[loaded_feeds.trips.trip_id == tid].unique_route_id.tolist()[0]
-                    rid = rid.split('_')[0]
-                    trip_ids = loaded_feeds.trips[loaded_feeds.trips.route_id == rid].trip_id
-                    stop_times_filter = loaded_feeds.stop_times.trip_id.isin(trip_ids)
-                    all_trips_on_a_route: pd.DataFrame = loaded_feeds.stop_times[stop_times_filter]
+                    # rid = loaded_feeds.trips[loaded_feeds.trips.trip_id == tid].unique_route_id.tolist()[0]
+                    # rid = rid.split('_')[0]
+                    # trip_ids = loaded_feeds.trips[loaded_feeds.trips.route_id == rid].trip_id
+                    # stop_times_filter = loaded_feeds.stop_times.trip_id.isin(trip_ids)
+                    # all_trips_on_a_route: pd.DataFrame = loaded_feeds.stop_times[stop_times_filter]
 
-                    all_trips_on_a_route['orig_stop_id'] = all_trips_on_a_route['stop_id']
-                    del all_trips_on_a_route['stop_id']
+                    # all_trips_on_a_route['orig_stop_id'] = all_trips_on_a_route['stop_id']
+                    # del all_trips_on_a_route['stop_id']
 
-                    dests = all_trips_on_a_route.groupby('trip_id')['orig_stop_id'].shift(-1)
-                    dests_str_list = dests.astype('Int64', errors='ignore').astype('str', errors='ignore').tolist()
-                    all_trips_on_a_route['dest_stop_id'] = dests_str_list
+                    # dests = all_trips_on_a_route.groupby('trip_id')['orig_stop_id'].shift(-1)
+                    # dests_str_list = dests.astype('Int64', errors='ignore').astype('str', errors='ignore').tolist()
+                    # all_trips_on_a_route['dest_stop_id'] = dests_str_list
 
-                    trip_count = all_trips_on_a_route[
-                        (all_trips_on_a_route.orig_stop_id == osid) &
-                        (all_trips_on_a_route.dest_stop_id == dsid)].shape[0]
-
-                    trip_count += all_trips_on_a_route[
-                        (all_trips_on_a_route.dest_stop_id == dsid) &
-                        (all_trips_on_a_route.orig_stop_id == osid)].shape[0]
+                    # trip_count = all_trips_on_a_route[
+                    #     (all_trips_on_a_route.orig_stop_id == osid) &
+                    #     (all_trips_on_a_route.dest_stop_id == dsid)].shape[0]
+                    #
+                    # trip_count += all_trips_on_a_route[
+                    #     (all_trips_on_a_route.dest_stop_id == dsid) &
+                    #     (all_trips_on_a_route.orig_stop_id == osid)].shape[0]
 
                     entry = {
                         'type': rt,
@@ -174,6 +190,7 @@ class GTFSGraphGenerator:
                         'name': data['unique_route_id'] + '_' + str(data['sequence']),
                         'color': 'BLACK',
                     }
+
                     edge_attrs[(node1, node2, key)] = entry
 
                 malformed_edge_attr = {k:v for k, v in edge_attrs.items() if math.isnan(v['distance']) or math.isinf(v['distance'])}

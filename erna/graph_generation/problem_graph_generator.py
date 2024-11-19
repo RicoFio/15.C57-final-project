@@ -3,6 +3,7 @@ from enum import Enum
 from pathlib import Path
 from typing import List
 import logging
+import pickle
 
 import geopandas as gpd
 import igraph as ig
@@ -10,6 +11,7 @@ import networkx as nx
 from shapely.geometry import Point
 
 from ..constants.osm_network_types import OSMNetworkTypes
+from ..constants.igraph_colors import IGraphColors
 from .gtfs_graph_generator import GTFSGraphGenerator
 from .osm_graph_generation import OSMGraphGenerator
 from ..constants.travel_speed import MetricTravelSpeed
@@ -30,7 +32,8 @@ class ProblemGraphGenerator:
                  agencies: List[str] = None, modalities: List[str] = None,
                  distances_computation_mode: str = 'osmnx',
                  clip_graph_to_neighborhoods: bool = False, 
-                 geographical_neighborhoods_gdf: gpd.GeoDataFrame = None) -> None:
+                 geographical_neighborhoods_gdf: gpd.GeoDataFrame = None,
+                 max_walking_distance: float = None, max_walking_travel_time: float = None) -> None:
         """
 
         Args:
@@ -58,6 +61,8 @@ class ProblemGraphGenerator:
         self.distances_computation_mode = distances_computation_mode
         self.clip_graph_to_neighborhoods = clip_graph_to_neighborhoods
         self.geographical_neighborhoods_gdf = geographical_neighborhoods_gdf
+        self.max_walking_distance = max_walking_distance
+        self.max_walking_travel_time = max_walking_travel_time
 
     def generate_problem_graph(self) -> Path:
         """
@@ -82,7 +87,9 @@ class ProblemGraphGenerator:
         logger.debug(f"Created OSM Graph and stored in {osm_graph_file_path}")
         # Load OSM Graph
         logger.debug("Loading OSM graph")
-        osm_graph = nx.read_gpickle(osm_graph_file_path)
+
+        with open(osm_graph_file_path, 'rb') as f:
+            osm_graph = pickle.load(f)
 
         # Build new graph starting from the GTFS graph
         logger.debug("###\nStarting problem graph generation")
@@ -95,13 +102,24 @@ class ProblemGraphGenerator:
         rc_names = self.res_centroids_gdf.name.to_list()
         rc_xs = self.res_centroids_gdf.geometry.x.to_numpy()
         rc_ys = self.res_centroids_gdf.geometry.y.to_numpy()
+        # Extract all other columns as additional attributes
+        additional_attributes = self.res_centroids_gdf.drop(columns=['name', 'geometry']).to_dict(orient='list')
 
         if not len(set(rc_names)) == len(rc_names):
             raise ValueError("Names of residential centroids in the GeoDataFrames have to be unique")
 
         # Names have to be integers!
-        add_points_to_graph(g=g, names=rc_names, xs=rc_xs, ys=rc_ys,
-                            v_type='rc_node', color='RED', ref_name=rc_names)
+        # Call add_points_to_graph with all attributes
+        add_points_to_graph(
+            g=g,
+            names=rc_names,
+            xs=rc_xs,
+            ys=rc_ys,
+            v_type='rc_node',
+            color=IGraphColors.RED.value,
+            ref_name=rc_names,
+            **additional_attributes
+        )
 
         # Add all POIs as vertices
         logger.debug("Adding POI vertices to graph")
@@ -113,32 +131,38 @@ class ProblemGraphGenerator:
             raise ValueError("Names of POIs in the GeoDataFrames have to be unique")
 
         add_points_to_graph(g=g, names=poi_names, xs=poi_xs, ys=poi_ys,
-                            v_type='poi_node', color='GREEN', ref_name=poi_names)
+                            v_type='poi_node', color=IGraphColors.GREEN.value, ref_name=poi_names)
 
         # Add edges from all res centroids to all POIs
         logger.debug(f"Adding edges rc_node->poi_node")
         add_edges_to_graph(g=g, osm_graph=osm_graph, from_node_type='rc_node', to_node_type='poi_node',
-                           e_type='walk', speed=MetricTravelSpeed.WALKING.value, color='GRAY',
-                           distances_computation_mode=self.distances_computation_mode)
+                           e_type='walk', speed=MetricTravelSpeed.WALKING.value, color=IGraphColors.GRAY.value,
+                           distances_computation_mode=self.distances_computation_mode,
+                           max_distance=self.max_walking_distance, max_travel_time=self.max_walking_travel_time)
 
         # Add edges from all res centroids to all PT stations
         logger.debug(f"Adding edges rc_node->pt_node")
         add_edges_to_graph(g=g, osm_graph=osm_graph, from_node_type='rc_node', to_node_type='pt_node',
-                           e_type='walk', speed=MetricTravelSpeed.WALKING.value, color='GRAY',
-                           distances_computation_mode=self.distances_computation_mode)
+                           e_type='walk', speed=MetricTravelSpeed.WALKING.value, color=IGraphColors.GRAY.value,
+                           distances_computation_mode=self.distances_computation_mode,
+                           max_distance=self.max_walking_distance, max_travel_time=self.max_walking_travel_time)
 
         # Add edges from all PT stations to all POIs
         logger.debug(f"Adding edges pt_node->poi_node")
         add_edges_to_graph(g=g, osm_graph=osm_graph, from_node_type='pt_node', to_node_type='poi_node',
-                           e_type='walk', speed=MetricTravelSpeed.WALKING.value, color='GRAY',
-                           distances_computation_mode=self.distances_computation_mode)
+                           e_type='walk', speed=MetricTravelSpeed.WALKING.value, color=IGraphColors.GRAY.value,
+                           distances_computation_mode=self.distances_computation_mode,
+                           max_distance=self.max_walking_distance, max_travel_time=self.max_walking_travel_time)
 
         # Set all edges to be active
         g.es['active'] = 1
 
         # Clean up node and edge attributes to keep only what is needed
+        vs_attrs_to_keep = (['name', 'uniqueagencyid', 'routetype', 'stopid', 'x', 'y', 'color', 'type'] +
+                            list(additional_attributes.keys()))
+
         for vs_attr in g.vs.attributes():
-            if vs_attr not in ['name', 'uniqueagencyid', 'routetype', 'stopid', 'x', 'y', 'color', 'type']:
+            if vs_attr not in vs_attrs_to_keep:
                 del g.vs[vs_attr]
 
         for es_attr in g.es.attributes():

@@ -138,3 +138,74 @@ Interdictions: {(0, 1): 0.0, (0, 2): 0.0, (1, 2): 0.0, (1, 3): 1.0, (2, 3): 0.0,
 # Creating a New Toy Graph
 If you would like to add your own graph to the _erna_ package, you can do so here: `./erna/toy_data`.
 Just create a new file and define your graph using the `erna/data/graph.py::Graph` class.
+
+# Working with real-world data
+This repository includes a fully-fledged problem graph generation script that can be used to generate a graph from real-world data. Here, you will need some form of census (optimally the ACS in the US) and a GTFS of the transit authority that is operative in the area of study. The OSMNX graph is automatically downloaded, and we can also automatically generate data on the points of interest using OSMNX. To understand how to generate data, have a look at `./notebooks/graph_gen.py`. The script uses the tools provided by the `erna` package.
+
+We already generated the problem graph for Boston and its MBTA metro network. A sample of the data dict available for each residential centroid is:
+
+```python
+{
+    'id': 2995.0,
+    'x': -70.9886912,
+    'y': 42.2583235,
+    'uniqueagencyid': 'None',
+    'routetype': nan,
+    'stopid': 'None',
+    'name': 'Quincy (250214177022)',
+    'color': 'red',
+    'type': 'rc_node',
+    'MBTACommunityType': 'subway or light rail',
+    'Households': 385.0,
+    'HouseholdsLessthan25000': 120.0,
+    'Households25000to49999': 12.0,
+    'Households50000to74999': 74.0,
+    'Households75000to99999': 35.0,
+    'Households100000orMore': 144.0,
+    'TotalPopulation': 1017.0,
+    'TotalPopulationMale': 481.0,
+    'TotalPopulationMaleUnder18Years': 45.0,
+    'TotalPopulationMale18to34Years': 218.0,
+    'TotalPopulationMale35to64Years': 167.0,
+    'TotalPopulationMale65YearsandOver': 51.0,
+    'TotalPopulationFemale': 536.0,
+    'TotalPopulationFemaleUnder18Years': 37.0,
+    'TotalPopulationFemale18to34Years': 201.0,
+    'TotalPopulationFemale35to64Years': 259.0,
+    'TotalPopulationFemale65YearsandOver': 39.0,
+    'TotalPopulationHispanicorLatino': 136.0,
+    'TotalPopulationNotHispanicorLatino': 881.0,
+    'TotalPopulationNotHispanicorLatinoWhiteAlone': 641.0,
+    'TotalPopulationNotHispanicorLatinoBlackorAfricanAmericanAlone': 53.0,
+    'TotalPopulationNotHispanicorLatinoAmericanIndianandAlaskaNativeAlone': 0.0,
+    'TotalPopulationNotHispanicorLatinoAsianAlone': 168.0,
+    'TotalPopulationNotHispanicorLatinoNativeHawaiianandOtherPacificIslanderAlone': 0.0,
+    'TotalPopulationNotHispanicorLatinoSomeOtherRaceAlone': 6.0,
+    'TotalPopulationNotHispanicorLatinoTwoorMoreRaces': 13.0,
+    'Workers16YearsandOver': 609.0,
+    'Workers16YearsandOverCarTruckorVan': 379.0,
+    'Workers16YearsandOverDroveAlone': 247.0,
+    'Workers16YearsandOverPublicTransportationIncludesTaxicab': 143.0,
+    'Workers16YearsandOverMotorcycle': 0.0,
+    'Workers16YearsandOverBicycle': 20.0,
+    'Workers16YearsandOverWalked': 47.0,
+    'Workers16YearsandOverOtherMeans': 8.0,
+    'Workers16YearsandOverWorkedAtHome': 12.0,
+    'OccupiedHousingUnitsNoVehicleAvailable': 41.0,
+    'OccupiedHousingUnits1VehicleAvailable': 195.0,
+    'OccupiedHousingUnits2VehiclesAvailable': 103.0,
+    'AreaTotal': 0.4208128,
+    'AreaLand': 896706.0,
+    'AreaWater': 193194.0,
+    'PopulationDensityPerSqMile': 2937.438,
+    'MedianHouseholdIncomeIn2022InflationAdjustedDollars': 63917.0,
+ }
+```
+
+In general, the graph can be subdivided into the following subgraphs:
+
+- **Residential Centroids (`rc_node`):** These are the nodes that represent the residential areas in the city. They are connected to transit stops and points of interests by an edge of type `walking`. The maximum travel time by walk is `45 minutes`.
+- **Public Transit Stops (`pt_node`):** These are the nodes that represent the transit stops in the city. They are connected to the nearest residential centroid by an edge of type `walking`.
+- **Points of Interest (`poi_node`):** These are the nodes that represent the points of interest in the city (i.e. LODES work locations which are equivalent to the rc_nodes). They are connected to the nearest public transit station by an edge of type `walking`.
+
+Thus, there are walking edges between RC nodes and PT nodes, between PT nodes and POI nodes, and between RC and POI nodes. The walking edges are weighted by the walking time between the two nodes. The walking time is calculated using the Haversine formula or through OSMNX routing.

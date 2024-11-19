@@ -5,6 +5,7 @@ from pathlib import Path
 from datetime import datetime
 from ..constants.osm_network_types import OSMNetworkTypes
 import logging
+import pickle
 
 
 logging.basicConfig()
@@ -27,5 +28,6 @@ class OSMGraphGenerator:
             g = ox.graph_from_bbox(self.bbox['south'], self.bbox['north'], self.bbox['west'], self.bbox['east'],
                                    network_type=self.network_type, simplify=True)
 
-            nx.write_gpickle(g, file_path)
+            with open(file_path, 'wb') as f:
+                pickle.dump(g, f, pickle.HIGHEST_PROTOCOL)
         return file_path

@@ -45,7 +45,8 @@ def add_points_to_graph(g: ig.Graph, names: List[str], xs: List[float], ys: List
 def add_edges_to_graph(g: ig.Graph, osm_graph: nx.MultiDiGraph,
                        from_node_type: str, to_node_type: str,
                        e_type: str, speed: float, color: str = None,
-                       distances_computation_mode: str = 'osmnx') -> None:
+                       distances_computation_mode: str = 'osmnx',
+                       max_distance: float = None, max_travel_time: float = None) -> None:
     """
 
     Args:
@@ -57,7 +58,7 @@ def add_edges_to_graph(g: ig.Graph, osm_graph: nx.MultiDiGraph,
         e_type:
         speed: in km/h
         color:
-
+        max_distance:
     Returns:
 
     """
@@ -91,11 +92,21 @@ def add_edges_to_graph(g: ig.Graph, osm_graph: nx.MultiDiGraph,
     distances = np.array(distances)
     distances[distances == np.inf] = distances.max()
 
+    # Filter edges based on max_distance and max_travel_time
+    if max_distance is not None:
+        valid_edges = distances <= max_distance
+    else:
+        valid_edges = np.ones_like(distances, dtype=bool)
+
+    if max_travel_time is not None:
+        travel_times = (distances / (speed * 1000)) * 60
+        valid_edges &= travel_times <= max_travel_time
+
     edge_attrs = {
-        'distance': np.round(distances, decimals=2),
+        'distance': np.round(distances[valid_edges], decimals=2),
         'type': e_type,
-        'tt': np.round((distances / (speed * 1000)) * 60, decimals=2),
+        'tt': np.round((distances[valid_edges] / (speed * 1000)) * 60, decimals=2),
         'color': color,
     }
 
-    g.add_edges(edges, edge_attrs)
+    g.add_edges(np.array(edges)[valid_edges].tolist(), edge_attrs)

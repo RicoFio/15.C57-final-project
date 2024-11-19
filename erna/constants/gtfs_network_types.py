@@ -17,9 +17,9 @@ from enum import Enum
 
 
 class GTFSNetworkTypes(Enum):
+    LIGHT_RAIL = 0
     TRAM = 0
     STREETCAR = 0
-    LIGHT_RAIL = 0
     METRO = 1
     SUBWAY = 1
     RAIL = 2

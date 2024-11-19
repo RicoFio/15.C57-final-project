@@ -1,5 +1,6 @@
 import osmnx as ox
 from pathlib import Path
+import geopandas as gpd
 
 
 def get_bbox(city: str) -> dict:
@@ -19,7 +20,7 @@ def get_bbox(city: str) -> dict:
         north=gdf.loc[0, 'bbox_north']
     )
 
-def get_pois_gdf(city: str, poi_types: dict) -> None:
+def get_pois_gdf(city: str, poi_types: dict) -> gpd.GeoDataFrame:
     pois = ox.geometries_from_place(city, tags=poi_types)
     pois = pois.reset_index()
     pois = pois.set_index('osmid')
