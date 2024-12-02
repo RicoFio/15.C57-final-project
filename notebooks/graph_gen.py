@@ -1,11 +1,6 @@
 import os
 from pathlib import Path
-import json
-
-import osmnx as ox
 import geopandas as gpd
-import pandas as pd
-import numpy as np
 import igraph as ig
 from tqdm import tqdm
 from erna.graph_generation.problem_graph_generator import ProblemGraphGenerator
@@ -77,7 +72,6 @@ if __name__ == "__main__":
     res_centroids_gdf = gdf[columns_to_keep].copy()
     res_centroids_gdf = res_centroids_gdf.rename(columns={'res_centroid': 'geometry', 'TOWN': 'name'})
     res_centroids_gdf['name'] = res_centroids_gdf['name'].str.title() + ' (' + res_centroids_gdf['GEOID20'] + ')'
-    res_centroids_gdf = res_centroids_gdf.drop(columns='GEOID20')
     res_centroids_gdf = gpd.GeoDataFrame(res_centroids_gdf, geometry='geometry', crs=crs)
 
     gtfs_zip_file_path = BASE_PATH / gtfs_file
