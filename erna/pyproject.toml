@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "erna"
+version = "0.1.0"
+description = ""
+authors = ["TongJyuhon <yhtang2001@foxmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.9,<3.13"
+networkx = "^3.1"
+matplotlib = "^3.8.0"
+numpy = "^1.26.0"
+pandas = "1.4"
+gurobipy = "^12.0.0"
+tqdm = "^4.67.0"
+urbanaccess = "^0.2.2"
+haversine = "^2.8.1"
+igraph = "^0.11.8"
+osmnx = "^1.9.4"
+folium = "^0.18.0"
+mapclassify = "^2.8.1"
+openpyxl = "^3.1.5"
+pyarrow = {extras = ["parquet"], version = "^18.0.0"}
+cairocffi = "^1.7.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
