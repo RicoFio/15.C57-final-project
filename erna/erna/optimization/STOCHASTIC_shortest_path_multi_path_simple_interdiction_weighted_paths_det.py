@@ -3,10 +3,24 @@ from erna.toy_data.toy_graph_1 import toy_graph_1
 import numpy as np
 import random
 import logging
+import argparse
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
+# Set up argument parser
+parser = argparse.ArgumentParser(description='input params')
+parser.add_argument('--seed', type=int, default=0, help='Random seed')
+parser.add_argument('--stage', type=int, required=True, help='Stage number')
+
+# Parse arguments
+args = parser.parse_args()
+
+if args.stage == 1:
+    stage = 1
+else:
+    stage = 2
 
 ##############################################################
 # SETUP
@@ -76,44 +90,92 @@ for p in od_pairs:
         # Variable introduced to represent the non-linearity
         q_vars[p, a] = model.addVar(name=f'q_{a}', vtype=GRB.BINARY)
 
-# Fortification planning
-x_vars = model.addVars(edges, obj=edges, name='x', vtype=GRB.BINARY)
 # Successful interdiction variable
 z_vars = model.addVars(edges, obj=edges, name='z', vtype=GRB.BINARY)
 
-# Objective: minimize the total cost of the path
-model.modelSense = GRB.MINIMIZE
-model.setObjective(
-    quicksum(
-        path_weighting[p] * (edges[a] * w_vars[p, a] + interdiction_delay * q_vars[p, a]) for p in od_pairs for a in edges)
-)
+##############################################################
+# STAGE 1
+##############################################################
+if stage == 1:
+    # Fortification planning
+    x_vars = model.addVars(edges, obj=edges, name='x', vtype=GRB.BINARY)
 
-# Constraints
-# Flow
-for p in od_pairs:
-    origin, destination = p
-    for node in nodes:
-        if node != origin and node != destination:
-            model.addConstr(quicksum(w_vars[p, (i, j)] for i, j in edges if j == node) ==
-                            quicksum(w_vars[p, (j, i)] for j, i in edges if j == node), f"flow")
+    # Objective: minimize the total cost of the path
+    model.modelSense = GRB.MINIMIZE
+    model.setObjective(
+        quicksum(
+            path_weighting[p] * (edges[a] * w_vars[p, a] + interdiction_delay * q_vars[p, a]) for p in od_pairs for a in edges)
+    )
 
-    # McCormick
-    for a in edges:
-        model.addConstr(q_vars[p, a] <= z_vars[a])
-        model.addConstr(q_vars[p, a] <= w_vars[p, a])
-        model.addConstr(q_vars[p, a] >= z_vars[a] + w_vars[p, a] - 1)
+    # Constraints
+    # Flow
+    for p in od_pairs:
+        origin, destination = p
+        for node in nodes:
+            if node != origin and node != destination:
+                model.addConstr(quicksum(w_vars[p, (i, j)] for i, j in edges if j == node) ==
+                                quicksum(w_vars[p, (j, i)] for j, i in edges if j == node), f"flow")
 
-    # Exactly one edge leaving the start node and entering the end node
-    model.addConstr(quicksum(w_vars[p, (origin, j)] for j in nodes if (origin, j) in edges) == 1, 'p_outward_edge')
-    model.addConstr(quicksum(w_vars[p, (i, destination)] for i in nodes if (i, destination) in edges) == 1,
-                    'p_inward_edge')
+        # McCormick
+        for a in edges:
+            model.addConstr(q_vars[p, a] <= z_vars[a])
+            model.addConstr(q_vars[p, a] <= w_vars[p, a])
+            model.addConstr(q_vars[p, a] >= z_vars[a] + w_vars[p, a] - 1)
 
-# For each scenario
-for s in range(num_scenarios):
-    for a in edges:
-        # Big M
-        model.addConstrs((quicksum(alpha[s] * (interdiction_sample[s, a]) for s in range(num_scenarios)) - x_vars[a] <= M * z_vars[a] for a in edges), 'big_m_trick_UB')
-        model.addConstrs((quicksum(alpha[s] * (interdiction_sample[s, a]) for s in range(num_scenarios)) - x_vars[a] >= -M * (1 - z_vars[a]) for a in edges), 'big_m_trick_LB')
+        # Exactly one edge leaving the start node and entering the end node
+        model.addConstr(quicksum(w_vars[p, (origin, j)] for j in nodes if (origin, j) in edges) == 1, 'p_outward_edge')
+        model.addConstr(quicksum(w_vars[p, (i, destination)] for i in nodes if (i, destination) in edges) == 1,
+                        'p_inward_edge')
+        
+    # For each scenario
+    for s in range(num_scenarios):
+        for a in edges:
+            # Big M
+            model.addConstrs((quicksum(alpha[s] * (interdiction_sample[s, a]) for s in range(num_scenarios)) - x_vars[a] <= M * z_vars[a] for a in edges), 'big_m_trick_UB')
+            model.addConstrs((quicksum(alpha[s] * (interdiction_sample[s, a]) for s in range(num_scenarios)) - x_vars[a] >= -M * (1 - z_vars[a]) for a in edges), 'big_m_trick_LB')
+
+##############################################################
+# STAGE 2
+##############################################################
+else:
+    # Fortification planning
+    # read previously saved xzs
+    x_vars = np.load(f"../toy_data/x_vars_1_{args.seed}_det.npy", allow_pickle=True).item()
+
+    # Objective: minimize the total cost of the path
+    model.modelSense = GRB.MINIMIZE
+    model.setObjective(
+        quicksum(alpha[s] * quicksum(
+            path_weighting[p] * (edges[a] * w_vars[p, a] + interdiction_delay * q_vars[p, a]) for p in od_pairs for a in edges)
+        for s in range(num_scenarios))
+    )
+
+    # Constraints
+    # Flow
+    for p in od_pairs:
+        origin, destination = p
+        for node in nodes:
+            if node != origin and node != destination:
+                model.addConstr(quicksum(w_vars[p, (i, j)] for i, j in edges if j == node) ==
+                                quicksum(w_vars[p, (j, i)] for j, i in edges if j == node), f"flow")
+
+        # McCormick
+        for a in edges:
+            model.addConstr(q_vars[p, a] <= z_vars[a])
+            model.addConstr(q_vars[p, a] <= w_vars[p, a])
+            model.addConstr(q_vars[p, a] >= z_vars[a] + w_vars[p, a] - 1)
+
+        # Exactly one edge leaving the start node and entering the end node
+        model.addConstr(quicksum(w_vars[p, (origin, j)] for j in nodes if (origin, j) in edges) == 1, 'p_outward_edge')
+        model.addConstr(quicksum(w_vars[p, (i, destination)] for i in nodes if (i, destination) in edges) == 1,
+                        'p_inward_edge')
+
+    # For each scenario
+    for s in range(num_scenarios):
+        for a in edges:
+            # Big M
+            model.addConstrs((interdiction_sample[s, a] - x_vars[a] <= M * z_vars[a] for a in edges), 'big_m_trick_UB')
+            model.addConstrs((interdiction_sample[s, a] - x_vars[a] >= -M * (1 - z_vars[a]) for a in edges), 'big_m_trick_LB')
 
 # Budget constraint
 model.addConstr(quicksum(x_vars[a] for a in edges) <= Budget_x, 'fortification_budget_constraint')
@@ -125,6 +187,10 @@ print("DETERMINISTIC")
 # Print solution
 xzs = {x: x_vars[x].X for x in x_vars}
 qzs = {q: q_vars[q].X for q in q_vars}
+
+# save the results
+np.save(f"../toy_data/x_vars_{args.stage}_{args.seed}_det.npy", xzs)
+
 logger.info(f"x_vars: {xzs}")
 logger.info(f"q_vars: {qzs}")
 
