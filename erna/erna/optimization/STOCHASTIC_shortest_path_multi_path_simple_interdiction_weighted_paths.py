@@ -29,9 +29,10 @@ for (o, d) in od_pairs:
 
 # Fortification
 Budget_x = 100
+random.seed(0)
 
 # Extreme weather data
-num_scenarios = 1
+num_scenarios = 2
 alpha = [1/num_scenarios]*num_scenarios
 
 # S = ["No Rain", "Rain", "Storm", "Thunderstorm", "Flooding"]
@@ -130,6 +131,7 @@ logger.info(f"q_vars: {qzs}")
 
 if model.status == GRB.OPTIMAL:
     logger.info(f"Used budget: {sum(x_vars[a].X for a in edges)}")
+    print(f"Optimal objective value: {model.objVal}")
     for s in range(num_scenarios):
         for a in edges:
             # Big M
