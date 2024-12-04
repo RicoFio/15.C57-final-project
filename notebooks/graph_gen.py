@@ -6,7 +6,7 @@ from tqdm import tqdm
 from erna.graph_generation.problem_graph_generator import ProblemGraphGenerator
 from erna.graph_generation.utils.osm_utils import get_pois_gdf
 
-BASE_PATH = Path('/home/rico/Documents/courses/6.C571/Final Project/ernp/data/Boston')
+BASE_PATH = Path('/Users/hanyongxu/Dropbox (MIT)/2024Fall/6.C57_optimization/FinalProject/15.C57-final-project/data/Boston')
 city = "Boston"
 country = "US"
 osm_poi_tags = {'amenity':'school'}
@@ -91,7 +91,7 @@ if __name__ == "__main__":
                                             geographical_neighborhoods_gdf=gdf,
                                             clip_graph_to_neighborhoods=False,
                                             distances_computation_mode='haversine',
-                                            max_walking_travel_time=45)
+                                            max_walking_travel_time=15)
 
     resulting_graph_file = graph_generator.generate_problem_graph()
 
@@ -126,7 +126,7 @@ if __name__ == "__main__":
     g.delete_vertices(vertices_to_remove)
 
     # Modify the file name to include '_reduced'
-    reduced_file = resulting_graph_file.with_stem(resulting_graph_file.stem + '_reduced')
+    reduced_file = resulting_graph_file.with_stem(resulting_graph_file.stem + '_reduced_15min')
 
     # Save the resulting graph
     ig.write(g, str(reduced_file))
