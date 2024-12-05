@@ -31,6 +31,9 @@ for p in od_pairs:
 # Fortification
 Budget_x = 1
 
+# seed
+random.seed(0)
+
 # Big M trick
 M = 1_000
 
@@ -110,6 +113,7 @@ logger.info(f"q_vars: {qzs}")
 if model.status == GRB.OPTIMAL:
     logger.info(f"Used budget for: {[a for a in edges if x_vars[a].X > 0]}")
     logger.info(f"Total used budget: {sum(x_vars[a].X for a in edges)}")
+    print(f"Optimal objective value: {model.objVal}")
     for s in scenarios:
         for a in edges:
             # Big M
