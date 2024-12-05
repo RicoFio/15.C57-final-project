@@ -1,4 +1,5 @@
 from gurobipy import Model, GRB, quicksum
+
 from erna.toy_data.toy_graph_1 import toy_graph_1
 import numpy as np
 import random
@@ -16,43 +17,23 @@ logger.info("Starting setup of stochastic optimization")
 nodes = toy_graph_1.nodes
 edges = toy_graph_1.edges
 od_pairs = toy_graph_1.od_pairs
-interdiction_delay = 10
+scenarios = toy_graph_1.scenarios
 
 path_weighting = {}
-for (o, d) in od_pairs:
-    tg_b = toy_graph_1.get_neighborhood_people_count_per_group(o)
-    tg_s = toy_graph_1.get_neighborhood_mhhi(o)
-    path_weighting[o, d] = sum([b/s for s, b in zip(tg_s, tg_b)])
+for p in od_pairs:
+    tg_b = p.demand
+    tg_s = toy_graph_1.get_neighborhood_mhhi(p.origin_node, p.demographic_group)[0]
+    path_weighting[p] = tg_b/tg_s
 
 # path_weighting = {k: v/sum(path_weighting.values()) for k, v in path_weighting.items()}
 # path_weighting = {(0, 3): 1, (1, 2): 1000}
 
 # Fortification
-Budget_x = 100
+Budget_x = 1
+
+# seed
 random.seed(0)
 
-# Extreme weather data
-num_scenarios = 2
-alpha = [1/num_scenarios]*num_scenarios
-
-# S = ["No Rain", "Rain", "Storm", "Thunderstorm", "Flooding"]
-weather_probs = [0.4, 0.25, 0.2, 0.1, 0.05]
-interdiction_extent = [0, 1, 3, 7, 11]
-interdiction_uncertainty = [0.5, 1, 2, 3, 4]
-
-scenario_sample = np.random.choice(list(range(len(weather_probs))), p=weather_probs, size=num_scenarios)
-scenario_ies = [interdiction_extent[i] for i in scenario_sample]
-scenario_ius = [interdiction_uncertainty[i] for i in scenario_sample]
-
-print(scenario_ies)
-print(scenario_ius)
-interdiction_sample = {}
-for s in range(num_scenarios):
-    for a in edges:
-        interdiction_sample[s, a] = np.floor(np.random.normal(scenario_ies[s], scenario_ius[s], 1)[0])
-        # No negative interdiction
-        interdiction_sample[s, a] = 0 if interdiction_sample[s, a] < 0 else interdiction_sample[s, a]
-print(interdiction_sample)
 # Big M trick
 M = 1_000
 
@@ -84,15 +65,15 @@ z_vars = model.addVars(edges, obj=edges, name='z', vtype=GRB.BINARY)
 # Objective: minimize the total cost of the path
 model.modelSense = GRB.MINIMIZE
 model.setObjective(
-    quicksum(alpha[s] * quicksum(
-        path_weighting[p] * (edges[a] * w_vars[p, a] + interdiction_delay * q_vars[p, a]) for p in od_pairs for a in edges)
-    for s in range(num_scenarios))
+    quicksum(s.probability * quicksum(
+        path_weighting[p] * (edges[a] * w_vars[p, a] + s.get_tt_impact(a) * q_vars[p, a]) for p in od_pairs for a in edges)
+    for s in scenarios)
 )
 
 # Constraints
 # Flow
 for p in od_pairs:
-    origin, destination = p
+    origin, destination = p.origin_node, p.destination_node
     for node in nodes:
         if node != origin and node != destination:
             model.addConstr(quicksum(w_vars[p, (i, j)] for i, j in edges if j == node) ==
@@ -110,11 +91,11 @@ for p in od_pairs:
                     'p_inward_edge')
 
 # For each scenario
-for s in range(num_scenarios):
+for s in scenarios:
     for a in edges:
         # Big M
-        model.addConstrs((interdiction_sample[s, a] - x_vars[a] <= M * z_vars[a] for a in edges), 'big_m_trick_UB')
-        model.addConstrs((interdiction_sample[s, a] - x_vars[a] >= -M * (1 - z_vars[a]) for a in edges), 'big_m_trick_LB')
+        model.addConstrs((s.get_severity(a) - x_vars[a] <= M * z_vars[a] for a in edges), 'big_m_trick_UB')
+        model.addConstrs((s.get_severity(a) - x_vars[a] >= -M * (1 - z_vars[a]) for a in edges), 'big_m_trick_LB')
 
 # Budget constraint
 model.addConstr(quicksum(x_vars[a] for a in edges) <= Budget_x, 'fortification_budget_constraint')
@@ -130,12 +111,14 @@ logger.info(f"x_vars: {xzs}")
 logger.info(f"q_vars: {qzs}")
 
 if model.status == GRB.OPTIMAL:
-    logger.info(f"Used budget: {sum(x_vars[a].X for a in edges)}")
+    logger.info(f"Used budget for: {[a for a in edges if x_vars[a].X > 0]}")
+    logger.info(f"Total used budget: {sum(x_vars[a].X for a in edges)}")
     print(f"Optimal objective value: {model.objVal}")
-    for s in range(num_scenarios):
+    for s in scenarios:
         for a in edges:
             # Big M
-            logger.info(f"{interdiction_sample[s, a] - x_vars[a].X} of {z_vars[a].X}")
+            logger.info(f"{s.get_severity(a) - x_vars[a].X} of {z_vars[a].X}")
+
 else:
     print("No solution found")
 
@@ -148,6 +131,7 @@ if model.status == GRB.OPTIMAL:
         for a in edges:
             # Edge is in the shortest path
             if w_vars[p, a].X == 1.0:
-                print(f"\t\tEdge from {a[0]} to {a[1]} with cost {edges[a]}")
+                exp_tt = sum(s.probability * (edges[a] + s.get_tt_impact(a)) for s in scenarios)
+                print(f"\t\tEdge from {a[0]} to {a[1]} with expected travel time {exp_tt}")
 else:
     print("No solution found")
