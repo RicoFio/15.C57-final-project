@@ -1,8 +1,9 @@
 from dataclasses import dataclass, asdict
 from typing import Optional
 
+import igraph
 import networkx as nx
-from igraph import Graph as IGraph
+import igraph as ig
 import logging
 
 from jinja2 import TemplateRuntimeError
@@ -181,7 +182,7 @@ class Graph:
 
     def to_igraph(self):
         # Create an igraph graph
-        g = IGraph(directed=True)
+        g = ig.Graph(directed=True)
 
         # Add nodes
         g.add_vertices(self.nodes)
@@ -211,3 +212,7 @@ class Graph:
                 g.es[g.get_eid(*edge)][key] = value
 
         return g
+
+    @classmethod
+    def from_problem_graph(self, G: ig.Graph, od_pairs: list[ODPair], scenarios: Optional[list[Scenario]] = None):
+        pass

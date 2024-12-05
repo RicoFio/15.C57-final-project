@@ -25,9 +25,6 @@ for p in od_pairs:
     tg_s = toy_graph_1.get_neighborhood_mhhi(p.origin_node, p.demographic_group)[0]
     path_weighting[p] = tg_b/tg_s
 
-# path_weighting = {k: v/sum(path_weighting.values()) for k, v in path_weighting.items()}
-# path_weighting = {(0, 3): 1, (1, 2): 1000}
-
 # Fortification
 Budget_x = 1
 
@@ -99,7 +96,6 @@ model.addConstr(quicksum(x_vars[a] for a in edges) <= Budget_x, 'fortification_b
 
 # Optimize the model
 model.optimize()
-
 
 # Print solution
 xzs = {x: x_vars[x].X for x in x_vars}
