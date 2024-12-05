@@ -1,116 +1,96 @@
 from gurobipy import Model, GRB, quicksum
+
 from erna.toy_data.toy_graph_1 import toy_graph_1
 import numpy as np
 import random
 import logging
+
 import argparse
 
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+##############################################################
+# SETUP
+##############################################################
+logger.info("Starting setup of stochastic optimization")
+print("DETERMINISTIC")
+
 # Set up argument parser
 parser = argparse.ArgumentParser(description='input params')
 parser.add_argument('--seed', type=int, default=0, help='Random seed')
 parser.add_argument('--stage', type=int, required=True, help='Stage number')
-
 # Parse arguments
 args = parser.parse_args()
-
 if args.stage == 1:
     stage = 1
 else:
     stage = 2
 
-##############################################################
-# SETUP
-##############################################################
-logger.info("Starting setup of stochastic optimization")
-
 nodes = toy_graph_1.nodes
 edges = toy_graph_1.edges
 od_pairs = toy_graph_1.od_pairs
-interdiction_delay = 10
+scenarios = toy_graph_1.scenarios
 
 path_weighting = {}
-for (o, d) in od_pairs:
-    tg_b = toy_graph_1.get_neighborhood_people_count_per_group(o)
-    tg_s = toy_graph_1.get_neighborhood_mhhi(o)
-    path_weighting[o, d] = sum([b/s for s, b in zip(tg_s, tg_b)])
+for p in od_pairs:
+    tg_b = p.demand
+    tg_s = toy_graph_1.get_neighborhood_mhhi(p.origin_node, p.demographic_group)[0]
+    path_weighting[p] = tg_b/tg_s
 
 # path_weighting = {k: v/sum(path_weighting.values()) for k, v in path_weighting.items()}
 # path_weighting = {(0, 3): 1, (1, 2): 1000}
 
 # Fortification
-Budget_x = 100
+Budget_x = 1
+
+# seed
 random.seed(0)
 
-# Extreme weather data ######### looks like we are sampling from the distribution for each scenario and then run the n scenarios
-num_scenarios = 2
-alpha = [1/num_scenarios]*num_scenarios
-
-# S = ["No Rain", "Rain", "Storm", "Thunderstorm", "Flooding"]
-weather_probs = [0.4, 0.25, 0.2, 0.1, 0.05]
-interdiction_extent = [0, 1, 3, 7, 11]
-interdiction_uncertainty = [0.5, 1, 2, 3, 4]
-
-scenario_sample = np.random.choice(list(range(len(weather_probs))), p=weather_probs, size=num_scenarios)
-scenario_ies = [interdiction_extent[i] for i in scenario_sample]
-scenario_ius = [interdiction_uncertainty[i] for i in scenario_sample]
-
-print(scenario_ies)
-print(scenario_ius)
-interdiction_sample = {}
-for s in range(num_scenarios):
-    for a in edges:
-        interdiction_sample[s, a] = np.floor(np.random.normal(scenario_ies[s], scenario_ius[s], 1)[0])
-        # No negative interdiction
-        interdiction_sample[s, a] = 0 if interdiction_sample[s, a] < 0 else interdiction_sample[s, a]
-print(interdiction_sample)
 # Big M trick
 M = 1_000
-
 ##############################################################
-# Optimization
-##############################################################
-logger.info("Setting up optimization model")
-
-model = Model('StochasticShortestMultiPathInterdictionDET')
-# Suppress stdout
-model.setParam('OutputFlag', 0)
-
-# Decision Variables
-# Edge flow variables
-w_vars = {}
-# Decision variable representing non-linearity
-q_vars = {}
-for p in od_pairs:
-    for a in edges:
-        w_vars[p, a] = model.addVar(name=f'w_{a}', vtype=GRB.BINARY)
-        # Variable introduced to represent the non-linearity
-        q_vars[p, a] = model.addVar(name=f'q_{a}', vtype=GRB.BINARY)
-
-# Successful interdiction variable
-z_vars = model.addVars(edges, obj=edges, name='z', vtype=GRB.BINARY)
-
-##############################################################
-# STAGE 1
+# Optimization - STAGE 1
 ##############################################################
 if stage == 1:
+    logger.info("Setting up optimization model")
+
+    model = Model('StochasticShortestMultiPathInterdiction_det')
+    # Suppress stdout
+    model.setParam('OutputFlag', 0)
+
+    # Decision Variables
+    # Edge flow variables
+    w_vars = {}
+    # Decision variable representing non-linearity
+    q_vars = {}
+    for p in od_pairs:
+        for a in edges:
+            w_vars[p, a] = model.addVar(name=f'w_{a}', vtype=GRB.BINARY)
+            # Variable introduced to represent the non-linearity
+            q_vars[p, a] = model.addVar(name=f'q_{a}', vtype=GRB.BINARY)
+
     # Fortification planning
     x_vars = model.addVars(edges, obj=edges, name='x', vtype=GRB.BINARY)
+    # Successful interdiction variable
+    z_vars = model.addVars(edges, obj=edges, name='z', vtype=GRB.BINARY)
 
     # Objective: minimize the total cost of the path
     model.modelSense = GRB.MINIMIZE
+    mean_tt = quicksum(
+        quicksum(s.probability * s.get_tt_impact(a) for s in scenarios)
+        for a in edges
+    ) / len(scenarios)
     model.setObjective(
         quicksum(
-            path_weighting[p] * (edges[a] * w_vars[p, a] + interdiction_delay * q_vars[p, a]) for p in od_pairs for a in edges)
+            path_weighting[p] * (edges[a] * w_vars[p, a] + mean_tt * q_vars[p, a]) for p in od_pairs for a in edges)
     )
 
     # Constraints
     # Flow
     for p in od_pairs:
-        origin, destination = p
+        origin, destination = p.origin_node, p.destination_node
         for node in nodes:
             if node != origin and node != destination:
                 model.addConstr(quicksum(w_vars[p, (i, j)] for i, j in edges if j == node) ==
@@ -126,34 +106,98 @@ if stage == 1:
         model.addConstr(quicksum(w_vars[p, (origin, j)] for j in nodes if (origin, j) in edges) == 1, 'p_outward_edge')
         model.addConstr(quicksum(w_vars[p, (i, destination)] for i in nodes if (i, destination) in edges) == 1,
                         'p_inward_edge')
-        
+
     # For each scenario
-    for s in range(num_scenarios):
-        for a in edges:
-            # Big M
-            model.addConstrs((quicksum(alpha[s] * (interdiction_sample[s, a]) for s in range(num_scenarios)) - x_vars[a] <= M * z_vars[a] for a in edges), 'big_m_trick_UB')
-            model.addConstrs((quicksum(alpha[s] * (interdiction_sample[s, a]) for s in range(num_scenarios)) - x_vars[a] >= -M * (1 - z_vars[a]) for a in edges), 'big_m_trick_LB')
+    mean_severity = quicksum(quicksum(s.probability * s.get_severity(a) for a in edges) for s in scenarios)/len(scenarios)
+    for a in edges:
+        # Big M
+        model.addConstrs((mean_severity - x_vars[a] <= M * z_vars[a] for a in edges), 'big_m_trick_UB')
+        model.addConstrs((mean_severity - x_vars[a] >= -M * (1 - z_vars[a]) for a in edges), 'big_m_trick_LB')
+
+    # Budget constraint
+    model.addConstr(quicksum(x_vars[a] for a in edges) <= Budget_x, 'fortification_budget_constraint')
+
+    # Optimize the model
+    model.optimize()
+
+    # Print solution
+    xzs = {x: x_vars[x].X for x in x_vars}
+    qzs = {q: q_vars[q].X for q in q_vars}
+    logger.info(f"x_vars: {xzs}")
+    logger.info(f"q_vars: {qzs}")
+
+    # save the results
+    np.save(f"../toy_data/x_vars_{args.stage}_{args.seed}_det.npy", xzs)
+
+
+    if model.status == GRB.OPTIMAL:
+        logger.info(f"Used budget for: {[a for a in edges if x_vars[a].X > 0]}")
+        logger.info(f"Total used budget: {sum(x_vars[a].X for a in edges)}")
+        print(f"Optimal objective value: {model.objVal}")
+        
+        for s in scenarios:
+            for a in edges:
+                # Big M
+                logger.info(f"{s.get_severity(a) - x_vars[a].X} of {z_vars[a].X}")
+
+    else:
+        print("No solution found")
+
+    print(q_vars)
+
+    if model.status == GRB.OPTIMAL:
+        print(f'Shortest paths (multi-path approach) (toy_graph_1, ODs: {od_pairs}):')
+        for p in od_pairs:
+            print(f'\tFor OD pair {p}')
+            for a in edges:
+                # Edge is in the shortest path
+                if w_vars[p, a].X == 1.0:
+                    exp_tt = sum(s.probability * (edges[a] + s.get_tt_impact(a)) for s in scenarios)
+                    print(f"\t\tEdge from {a[0]} to {a[1]} with expected travel time {exp_tt}")
+    else:
+        print("No solution found")
+
 
 ##############################################################
-# STAGE 2
+# Optimization - STAGE 2
 ##############################################################
 else:
+    logger.info("Setting up optimization model")
+
+    model = Model('StochasticShortestMultiPathInterdiction_det')
+    # Suppress stdout
+    model.setParam('OutputFlag', 0)
+
+    # Decision Variables
+    # Edge flow variables
+    w_vars = {}
+    # Decision variable representing non-linearity
+    q_vars = {}
+    for p in od_pairs:
+        for a in edges:
+            w_vars[p, a] = model.addVar(name=f'w_{a}', vtype=GRB.BINARY)
+            # Variable introduced to represent the non-linearity
+            q_vars[p, a] = model.addVar(name=f'q_{a}', vtype=GRB.BINARY)
+
     # Fortification planning
     # read previously saved xzs
     x_vars = np.load(f"../toy_data/x_vars_1_{args.seed}_det.npy", allow_pickle=True).item()
 
+    # Successful interdiction variable
+    z_vars = model.addVars(edges, obj=edges, name='z', vtype=GRB.BINARY)
+
     # Objective: minimize the total cost of the path
     model.modelSense = GRB.MINIMIZE
     model.setObjective(
-        quicksum(alpha[s] * quicksum(
-            path_weighting[p] * (edges[a] * w_vars[p, a] + interdiction_delay * q_vars[p, a]) for p in od_pairs for a in edges)
-        for s in range(num_scenarios))
+        quicksum(s.probability * quicksum(
+            path_weighting[p] * (edges[a] * w_vars[p, a] + s.get_tt_impact(a) * q_vars[p, a]) for p in od_pairs for a in edges)
+        for s in scenarios)
     )
 
     # Constraints
     # Flow
     for p in od_pairs:
-        origin, destination = p
+        origin, destination = p.origin_node, p.destination_node
         for node in nodes:
             if node != origin and node != destination:
                 model.addConstr(quicksum(w_vars[p, (i, j)] for i, j in edges if j == node) ==
@@ -171,48 +215,47 @@ else:
                         'p_inward_edge')
 
     # For each scenario
-    for s in range(num_scenarios):
+    for s in scenarios:
         for a in edges:
             # Big M
-            model.addConstrs((interdiction_sample[s, a] - x_vars[a] <= M * z_vars[a] for a in edges), 'big_m_trick_UB')
-            model.addConstrs((interdiction_sample[s, a] - x_vars[a] >= -M * (1 - z_vars[a]) for a in edges), 'big_m_trick_LB')
+            model.addConstrs((s.get_severity(a) - x_vars[a] <= M * z_vars[a] for a in edges), 'big_m_trick_UB')
+            model.addConstrs((s.get_severity(a) - x_vars[a] >= -M * (1 - z_vars[a]) for a in edges), 'big_m_trick_LB')
 
-# Budget constraint
-model.addConstr(quicksum(x_vars[a] for a in edges) <= Budget_x, 'fortification_budget_constraint')
+    # Budget constraint
+    model.addConstr(quicksum(x_vars[a] for a in edges) <= Budget_x, 'fortification_budget_constraint')
 
-# Optimize the model
-model.optimize()
+    # Optimize the model
+    model.optimize()
 
-print("DETERMINISTIC")
-# Print solution
-xzs = {x: x_vars[x].X for x in x_vars}
-qzs = {q: q_vars[q].X for q in q_vars}
 
-# save the results
-np.save(f"../toy_data/x_vars_{args.stage}_{args.seed}_det.npy", xzs)
+    # Print solution
+    # xzs = {x: x_vars[x].X for x in x_vars}
+    qzs = {q: q_vars[q].X for q in q_vars}
+    # logger.info(f"x_vars: {xzs}")
+    logger.info(f"q_vars: {qzs}")
 
-logger.info(f"x_vars: {xzs}")
-logger.info(f"q_vars: {qzs}")
+    if model.status == GRB.OPTIMAL:
+        # logger.info(f"Used budget for: {[a for a in edges if x_vars[a].X > 0]}")
+        # logger.info(f"Total used budget: {sum(x_vars[a].X for a in edges)}")
+        print(f"Optimal objective value: {model.objVal}")
+        # for s in scenarios:
+        #     for a in edges:
+        #         # Big M
+        #         logger.info(f"{s.get_severity(a) - x_vars[a].X} of {z_vars[a].X}")
 
-if model.status == GRB.OPTIMAL:
-    logger.info(f"Used budget: {sum(x_vars[a].X for a in edges)}")
-    print(f"Optimal objective value: {model.objVal}")
-    for s in range(num_scenarios):
-        for a in edges:
-            # Big M
-            logger.info(f"{interdiction_sample[s, a] - x_vars[a].X} of {z_vars[a].X}")
-else:
-    print("No solution found")
+    else:
+        print("No solution found")
 
-print(q_vars)
+    print(q_vars)
 
-if model.status == GRB.OPTIMAL:
-    print(f'Shortest paths (multi-path approach) (toy_graph_1, ODs: {od_pairs}):')
-    for p in od_pairs:
-        print(f'\tFor OD pair {p}')
-        for a in edges:
-            # Edge is in the shortest path
-            if w_vars[p, a].X == 1.0:
-                print(f"\t\tEdge from {a[0]} to {a[1]} with cost {edges[a]}")
-else:
-    print("No solution found")
+    if model.status == GRB.OPTIMAL:
+        print(f'Shortest paths (multi-path approach) (toy_graph_1, ODs: {od_pairs}):')
+        for p in od_pairs:
+            print(f'\tFor OD pair {p}')
+            for a in edges:
+                # Edge is in the shortest path
+                if w_vars[p, a].X == 1.0:
+                    exp_tt = sum(s.probability * (edges[a] + s.get_tt_impact(a)) for s in scenarios)
+                    print(f"\t\tEdge from {a[0]} to {a[1]} with expected travel time {exp_tt}")
+    else:
+        print("No solution found")
