@@ -24,47 +24,47 @@ if __name__ == "__main__":
         'GEOID20',
         'TOWN',
         'MBTA Community Type',
-        'Households:',
-        'Households: Less than $25,000',
-        'Households: $25,000 to $49,999',
-        'Households: $50,000 to $74,999',
-        'Households: $75,000 to $99,999',
-        'Households: $100,000 or More',
+        # 'Households:',
+        # 'Households: Less than $25,000',
+        # 'Households: $25,000 to $49,999',
+        # 'Households: $50,000 to $74,999',
+        # 'Households: $75,000 to $99,999',
+        # 'Households: $100,000 or More',
         'Total Population',
-        'Total Population: Male',
-        'Total Population: Male: Under 18 Years',
-        'Total Population: Male: 18 to 34 Years',
-        'Total Population: Male: 35 to 64 Years',
-        'Total Population: Male: 65 Years and Over',
-        'Total Population: Female',
-        'Total Population: Female: Under 18 Years',
-        'Total Population: Female: 18 to 34 Years',
-        'Total Population: Female: 35 to 64 Years',
-        'Total Population: Female: 65 Years and Over',
-        'Total Population: Hispanic or Latino',
-        'Total Population: Not Hispanic or Latino',
-        'Total Population: Not Hispanic or Latino: White Alone',
-        'Total Population: Not Hispanic or Latino: Black or African American Alone',
-        'Total Population: Not Hispanic or Latino: American Indian and Alaska Native Alone',
-        'Total Population: Not Hispanic or Latino: Asian Alone',
-        'Total Population: Not Hispanic or Latino: Native Hawaiian and Other Pacific Islander Alone',
-        'Total Population: Not Hispanic or Latino: Some Other Race Alone',
-        'Total Population: Not Hispanic or Latino: Two or More Races',
-        'Workers 16 Years and Over:',
-        'Workers 16 Years and Over: Car, Truck, or Van',
-        'Workers 16 Years and Over: Drove Alone',
-        'Workers 16 Years and Over: Public Transportation (Includes Taxicab)',
-        'Workers 16 Years and Over: Motorcycle',
-        'Workers 16 Years and Over: Bicycle',
-        'Workers 16 Years and Over: Walked',
-        'Workers 16 Years and Over: Other Means',
-        'Workers 16 Years and Over: Worked At Home',
-        'Occupied Housing Units: No Vehicle Available',
-        'Occupied Housing Units: 1 Vehicle Available',
-        'Occupied Housing Units: 2 Vehicles Available', 'Area Total:',
-        'Area (Land)',
-        'Area (Water)',
-        'Population Density (Per Sq. Mile)',
+        # 'Total Population: Male',
+        # 'Total Population: Male: Under 18 Years',
+        # 'Total Population: Male: 18 to 34 Years',
+        # 'Total Population: Male: 35 to 64 Years',
+        # 'Total Population: Male: 65 Years and Over',
+        # 'Total Population: Female',
+        # 'Total Population: Female: Under 18 Years',
+        # 'Total Population: Female: 18 to 34 Years',
+        # 'Total Population: Female: 35 to 64 Years',
+        # 'Total Population: Female: 65 Years and Over',
+        # 'Total Population: Hispanic or Latino',
+        # 'Total Population: Not Hispanic or Latino',
+        # 'Total Population: Not Hispanic or Latino: White Alone',
+        # 'Total Population: Not Hispanic or Latino: Black or African American Alone',
+        # 'Total Population: Not Hispanic or Latino: American Indian and Alaska Native Alone',
+        # 'Total Population: Not Hispanic or Latino: Asian Alone',
+        # 'Total Population: Not Hispanic or Latino: Native Hawaiian and Other Pacific Islander Alone',
+        # 'Total Population: Not Hispanic or Latino: Some Other Race Alone',
+        # 'Total Population: Not Hispanic or Latino: Two or More Races',
+        # 'Workers 16 Years and Over:',
+        # 'Workers 16 Years and Over: Car, Truck, or Van',
+        # 'Workers 16 Years and Over: Drove Alone',
+        # 'Workers 16 Years and Over: Public Transportation (Includes Taxicab)',
+        # 'Workers 16 Years and Over: Motorcycle',
+        # 'Workers 16 Years and Over: Bicycle',
+        # 'Workers 16 Years and Over: Walked',
+        # 'Workers 16 Years and Over: Other Means',
+        # 'Workers 16 Years and Over: Worked At Home',
+        # 'Occupied Housing Units: No Vehicle Available',
+        # 'Occupied Housing Units: 1 Vehicle Available',
+        # 'Occupied Housing Units: 2 Vehicles Available', 'Area Total:',
+        # 'Area (Land)',
+        # 'Area (Water)',
+        # 'Population Density (Per Sq. Mile)',
         'Median Household Income (In 2022 Inflation Adjusted Dollars)',
         'res_centroid'
    ]
@@ -91,7 +91,7 @@ if __name__ == "__main__":
                                             geographical_neighborhoods_gdf=gdf,
                                             clip_graph_to_neighborhoods=False,
                                             distances_computation_mode='haversine',
-                                            max_walking_travel_time=45)
+                                            max_walking_travel_time=15)
 
     resulting_graph_file = graph_generator.generate_problem_graph()
 
@@ -121,6 +121,13 @@ if __name__ == "__main__":
         )
         if not has_valid_edge:
             vertices_to_remove.append(v.index)
+
+    # Add to the list of vertices to remove the vertices of type 'pt_node' that are not in the metro_subgraph
+    vertices_to_remove.extend(
+        v.index
+        for v in g.vs.select(type_in=['pt_node'])
+        if v['name'] not in metro_subgraph_vertex_indices
+    )
 
     # Remove the vertices
     g.delete_vertices(vertices_to_remove)

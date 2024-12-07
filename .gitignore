@@ -129,4 +129,8 @@ dmypy.json
 .pyre/
 
 # Data
-data
+./data
+
+# Urban Access
+cache
+logs
