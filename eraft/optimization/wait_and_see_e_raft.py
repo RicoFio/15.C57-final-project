@@ -16,6 +16,7 @@ def wait_and_see_e_raft(g: Graph, planning_budget: int,
         logger.setLevel(logging.INFO)
 
     expected_objective = 0
+    adaptation_choices = []
 
     for i, scenario in enumerate(g.scenarios):
 
@@ -30,5 +31,7 @@ def wait_and_see_e_raft(g: Graph, planning_budget: int,
         scenario_obj_value = scenario_model.getObjective().getValue()
         logger.info(f"Value for scenario {i}: {scenario_obj_value}")
         expected_objective += scenario.probability * scenario_obj_value
+        adaptation_choices.append({e: scenario_model.getVarByName(f'x[{e[0]},{e[1]}]').X for e in g.edges.keys()})
 
-    return expected_objective
+
+    return expected_objective, adaptation_choices

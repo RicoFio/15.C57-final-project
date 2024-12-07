@@ -87,14 +87,19 @@ def base_e_raft(
     model.setObjective(
         quicksum(scenario.probability *
             quicksum(
-                path_weighting[p] * (edges[a] * w_vars[s, p, a] + scenario.get_tt_impact(a) * q_vars[s, p, a])
-            for p in od_pairs for a in edges)
+                path_weighting[p] *
+                quicksum(
+                    edges[a] * w_vars[s, p, a] + scenario.get_tt_impact(a) * q_vars[s, p, a]
+                for a in edges)
+            for p in od_pairs)
         for s, scenario in enumerate(scenarios))
     )
 
     # Constraints
     # If X is given:
     if fixed_adaptation_decisions is not None:
+        if sum(fixed_adaptation_decisions.values()) > budget_x:
+            raise ValueError("The fixed adaptation decisions exceed the budget")
         for a in edges:
             model.addConstr(x_vars[a] == fixed_adaptation_decisions[a])
 

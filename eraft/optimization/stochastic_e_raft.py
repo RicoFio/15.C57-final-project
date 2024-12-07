@@ -22,4 +22,6 @@ def stochastic_e_raft(g: Graph, planning_budget: int,
         verbose=verbose, big_m=big_m
     )
 
-    return stochastic_model.getObjective().getValue()
+    adaptation_choice = {e: stochastic_model.getVarByName(f'x[{e[0]},{e[1]}]').X for e in g.edges.keys()}
+
+    return stochastic_model.getObjective().getValue(), adaptation_choice
