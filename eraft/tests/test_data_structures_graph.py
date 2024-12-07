@@ -24,7 +24,7 @@ def test_get_mean_scenario():
     )
 
     # Get the mean scenario
-    mean_scenario = graph.get_mean_scenario()
+    mean_scenario = graph.get_ev_scenario()
 
     # Expected mean edge impact and severity matrices
     expected_edge_impact = {

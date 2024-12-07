@@ -17,15 +17,16 @@ def deterministic_e_raft(g: Graph, planning_budget: int,
 
     scenarios = g.scenarios
 
-    mean_model = base_e_raft(
+    ev_model = base_e_raft(
         g=g,
         planning_budget=planning_budget,
         utility_profile_function=utility_profile_function,
-        verbose=verbose, big_m=big_m, use_mean_scenario=True,
+        verbose=False, big_m=big_m, use_mean_scenario=True,
         fixed_adaptation_decisions=None
     )
 
-    adaptations_ev = {e: mean_model.getVarByName(f'x[{e[0]},{e[1]}]').X for e in g.edges.keys()}
+    adaptations_ev = {e: ev_model.getVarByName(f'x[{e[0]},{e[1]}]').X for e in g.edges.keys()}
+    logger.info(f"EV E-RAFT adaptations: {adaptations_ev}")
 
     expected_objective = 0
 
@@ -34,7 +35,7 @@ def deterministic_e_raft(g: Graph, planning_budget: int,
             g=g,
             planning_budget=planning_budget,
             utility_profile_function=utility_profile_function,
-            verbose=verbose, big_m=big_m, use_mean_scenario=False,
+            verbose=False, big_m=big_m, use_mean_scenario=False,
             use_single_scenario=i, fixed_adaptation_decisions=adaptations_ev
         )
 

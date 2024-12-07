@@ -17,7 +17,8 @@ def wait_and_see_e_raft(g: Graph, planning_budget: int,
 
     expected_objective = 0
 
-    for i, s in enumerate(g.scenarios):
+    for i, scenario in enumerate(g.scenarios):
+
         scenario_model = base_e_raft(
             g=g,
             planning_budget=planning_budget,
@@ -28,6 +29,6 @@ def wait_and_see_e_raft(g: Graph, planning_budget: int,
 
         scenario_obj_value = scenario_model.getObjective().getValue()
         logger.info(f"Value for scenario {i}: {scenario_obj_value}")
-        expected_objective += s.probability * scenario_obj_value
+        expected_objective += scenario.probability * scenario_obj_value
 
     return expected_objective

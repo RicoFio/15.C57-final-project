@@ -71,12 +71,12 @@ toy_graph_2 = Graph(
         Scenario(
             probability=0.1,
             edge_impact_matrix={
-                (0, 1): 90.0,
-                (1, 3): 90.0,
+                # (0, 1): 90.0,
+                # (1, 3): 90.0,
             },
             severity_matrix={
-                (0, 1): 1.0,
-                (0, 2): 1.0,
+                # (0, 1): 1.0,
+                # (0, 2): 1.0,
             },
         )
     ]

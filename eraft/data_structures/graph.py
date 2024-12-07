@@ -163,28 +163,24 @@ class Graph:
             return [c.median_hhi for n in self.neighborhoods for c in n.census if n.node == node and c.group == group]
         return [c.median_hhi for n in self.neighborhoods for c in n.census if n.node == node]
 
-    def get_mean_scenario(self) -> Scenario:
+    def get_ev_scenario(self) -> Scenario:
         edge_impact_matrix = {}
         severity_matrix = {}
 
         for scenario in self.scenarios:
             for edge, tt_impact in scenario.edge_impact_matrix.items():
-                edge_impact_matrix[edge] = edge_impact_matrix.get(edge, 0) + tt_impact
+                edge_impact_matrix[edge] = scenario.probability * (edge_impact_matrix.get(edge, 0) + tt_impact)
             if scenario.severity_matrix:
                 for edge, severity in scenario.severity_matrix.items():
-                    severity_matrix[edge] = severity_matrix.get(edge, 0) + severity
-        for edge in edge_impact_matrix:
-            edge_impact_matrix[edge] /= len(self.scenarios)
-        for edge in severity_matrix:
-            severity_matrix[edge] /= len(self.scenarios)
+                    severity_matrix[edge] = scenario.probability * (severity_matrix.get(edge, 0) + severity)
 
-        mean_scenario = Scenario(
+        ev_scenario = Scenario(
             probability=1,
             edge_impact_matrix=edge_impact_matrix,
             severity_matrix=severity_matrix
         )
 
-        return mean_scenario
+        return ev_scenario
 
     def get_scenario(self, id: int) -> Scenario:
         return self.scenarios[id]
