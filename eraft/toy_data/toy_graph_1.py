@@ -1,5 +1,5 @@
-from ..data.graph import Graph
-from ..data.graph import (
+from ..data_structures.graph import Graph
+from ..data_structures.graph import (
     Neighborhood,
     Demographic,
     DemographicGroup,

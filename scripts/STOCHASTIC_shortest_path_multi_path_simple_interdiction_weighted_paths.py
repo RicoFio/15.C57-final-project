@@ -1,8 +1,6 @@
 from gurobipy import Model, GRB, quicksum
 
-from erna.toy_data.toy_graph_1 import toy_graph_1
-import numpy as np
-import random
+from eraft.toy_data.toy_graph_1 import toy_graph_1
 import logging
 
 logging.basicConfig()
@@ -25,7 +23,7 @@ for p in od_pairs:
     tg_s = toy_graph_1.get_neighborhood_mhhi(p.origin_node, p.demographic_group)[0]
     path_weighting[p] = tg_b/tg_s
 
-# Fortification
+# Adaptation
 Budget_x = 1
 
 # Big M trick
@@ -51,7 +49,7 @@ for p in od_pairs:
         # Variable introduced to represent the non-linearity
         q_vars[p, a] = model.addVar(name=f'q_{a}', vtype=GRB.BINARY)
 
-# Fortification planning
+# Adaptation planning
 x_vars = model.addVars(edges, obj=edges, name='x', vtype=GRB.BINARY)
 # Successful interdiction variable
 z_vars = model.addVars(edges, obj=edges, name='z', vtype=GRB.BINARY)
@@ -92,7 +90,7 @@ for s in scenarios:
         model.addConstrs((s.get_severity(a) - x_vars[a] >= -M * (1 - z_vars[a]) for a in edges), 'big_m_trick_LB')
 
 # Budget constraint
-model.addConstr(quicksum(x_vars[a] for a in edges) <= Budget_x, 'fortification_budget_constraint')
+model.addConstr(quicksum(x_vars[a] for a in edges) <= Budget_x, 'adaptation_budget_constraint')
 
 # Optimize the model
 model.optimize()

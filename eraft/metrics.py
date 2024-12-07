@@ -1,5 +1,5 @@
 from gurobipy import Model
-from .data.graph import Scenario
+from eraft.data_structures.graph import Scenario
 
 
 def compute_evpi(exp_obj_stochastic: float, exp_obj_deterministic: float) -> float:

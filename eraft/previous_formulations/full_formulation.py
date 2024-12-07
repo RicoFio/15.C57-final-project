@@ -11,7 +11,7 @@ logger.setLevel(logging.INFO)
 
 
 def fixed_interdiction(graph: Graph, interdictions: dict[tuple[int, int], int],
-                       fortifications: dict[tuple[int, int], int], interdiction_delay: float,
+                       adaptations: dict[tuple[int, int], int], interdiction_delay: float,
                        path_weightings: dict[tuple[int, int], int] = None):
     nodes = graph.nodes
     edges = graph.edges
@@ -80,8 +80,8 @@ def fixed_interdiction(graph: Graph, interdictions: dict[tuple[int, int], int],
     # For each scenario
     for a in edges:
         # Big M trick
-        model.addConstr(interdictions[a] - fortifications[a] <= M * z_vars[a], 'big_m_trick_UB')
-        model.addConstr(interdictions[a] - fortifications[a] >= -M * (1 - z_vars[a]), 'big_m_trick_LB')
+        model.addConstr(interdictions[a] - adaptations[a] <= M * z_vars[a], 'big_m_trick_UB')
+        model.addConstr(interdictions[a] - adaptations[a] >= -M * (1 - z_vars[a]), 'big_m_trick_LB')
 
     # Optimize the model
     model.optimize()
@@ -118,17 +118,17 @@ if __name__ == "__main__":
     graph = toy_graph_1
 
     interdictions = []
-    fortifications = []
+    adaptations = []
 
     for a in graph.edges:
-        fortifications.append({e: 1 for e in toy_graph_1.edges})
+        adaptations.append({e: 1 for e in toy_graph_1.edges})
         interdictions.append({e: 2 if a==e else 0 for e in graph.edges})
 
     shortest_paths = []
     travel_times = []
     model_objs = []
 
-    for fort, inter in zip(fortifications, interdictions):
+    for fort, inter in zip(adaptations, interdictions):
         res = fixed_interdiction(toy_graph_1, inter, fort, 10)
         shortest_paths.append(res[0])
         travel_times.append(list(res[1].values()))

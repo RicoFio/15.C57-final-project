@@ -1,4 +1,8 @@
-from dataclasses import dataclass, asdict
+from dataclasses import (
+    dataclass,
+    asdict,
+    field,
+)
 from typing import Optional
 
 import igraph
@@ -49,8 +53,8 @@ class ODPair:
 @dataclass(frozen=True)
 class Scenario:
     probability: float
-    edge_impact_matrix: dict[tuple[int, int],float]
-    severity_matrix: Optional[dict[tuple[int, int],float]] = None
+    edge_impact_matrix: dict[tuple[int, int], float]
+    severity_matrix: Optional[dict[tuple[int, int], float]] = None
 
     def get_tt_impact(self, edge: tuple[int, int]) -> float:
         return self.edge_impact_matrix.get(edge, 0.0)
@@ -59,6 +63,12 @@ class Scenario:
         if self.severity_matrix:
             return self.severity_matrix.get(edge, 0.0)
         return 0.0
+
+    def __hash__(self):
+        # Combine the hash of all immutable components
+        edge_impact_items = frozenset(self.edge_impact_matrix.items())
+        severity_items = frozenset(self.severity_matrix.items()) if self.severity_matrix else frozenset()
+        return hash((self.probability, edge_impact_items, severity_items))
 
 
 @dataclass(frozen=True)
@@ -126,7 +136,7 @@ class Graph:
 
     def _verify_scenarios_in_graph(self) -> bool:
         for scenario in self.scenarios:
-            for (node1, node2), tt_impact in scenario.edge_impact_matrix.items():
+            for (node1, node2), tt_impact in dict(scenario.edge_impact_matrix).items():
                 if node1 not in self.nodes or node2 not in self.nodes:
                     return False
                 if (node1, node2) not in self.edges:
@@ -154,8 +164,8 @@ class Graph:
         return [c.median_hhi for n in self.neighborhoods for c in n.census if n.node == node]
 
     def get_mean_scenario(self) -> Scenario:
-        edge_impact_matrix={}
-        severity_matrix={}
+        edge_impact_matrix = {}
+        severity_matrix = {}
 
         for scenario in self.scenarios:
             for edge, tt_impact in scenario.edge_impact_matrix.items():
@@ -175,6 +185,9 @@ class Graph:
         )
 
         return mean_scenario
+
+    def get_scenario(self, id: int) -> Scenario:
+        return self.scenarios[id]
 
     def to_networkx_graph(self):
         # Create a NetworkX graph

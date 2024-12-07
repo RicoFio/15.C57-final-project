@@ -7,7 +7,7 @@ od_pairs = toy_graph_1.od_pairs
 interdiction_delay = 10
 interdictions = {e: 0 for e in toy_graph_1.edges}
 interdictions[1, 2] = 2
-fortifications = {e: 1 for e in toy_graph_1.edges}
+adaptations = {e: 1 for e in toy_graph_1.edges}
 
 
 def fixed_interdiction():
@@ -72,8 +72,8 @@ def fixed_interdiction():
     # For each scenario
     for a in edges:
         # Big M
-        model.addConstrs((interdictions[a] - fortifications[a] <= M * z_vars[a] for a in edges), 'big_m_trick_UB')
-        model.addConstrs((interdictions[a] - fortifications[a] >= -M * (1 - z_vars[a]) for a in edges), 'big_m_trick_LB')
+        model.addConstrs((interdictions[a] - adaptations[a] <= M * z_vars[a] for a in edges), 'big_m_trick_UB')
+        model.addConstrs((interdictions[a] - adaptations[a] >= -M * (1 - z_vars[a]) for a in edges), 'big_m_trick_LB')
 
     # Optimize the model
     model.optimize()

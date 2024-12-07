@@ -1,4 +1,4 @@
-from ..data.graph import Graph, ODPair
+from ..data_structures.graph import Graph, ODPair
 
 
 def base_utility_profile_function(g: Graph, p: ODPair) -> float:
